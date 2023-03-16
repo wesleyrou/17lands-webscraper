@@ -2,8 +2,11 @@ import puppeteer from 'puppeteer';
 // import {readFileSync} from 'fs';
 
 const parseColorData = (html) => {
-    let data = html.split('</tr>').slice(13,23).map(row => {
+    let sliceRangeStart = html.split('</tr>').findIndex(row => row.match(/<tr class="color-summary"><td class="">Two-color/g))
+    let data = html.split('</tr>').slice(sliceRangeStart + 1,sliceRangeStart + 11).map(row => {
+        // console.log(row)
         let [color, wins, games, wr] = row.slice(42,-5).split('</td><td class="">')
+        // console.log(color)
         return {'color':color.slice(-3,-1),wins,games,wr,'drafts':Math.round((games - wins) / 3),}
     })
     let totalDrafts = data.reduce((cum, acc) => cum + acc.drafts, 0)
@@ -27,6 +30,43 @@ const parseTrophyData = (html) => {
     return data
 }
 
+const sevenDaysAgoDate = (daysAgo = 7) => {
+    let date = new Date()
+    let year = date.getFullYear()
+    let month = date.getMonth() + 1
+    let day = date.getDate()
+    if(day >= (1 + daysAgo)) {
+        day-=daysAgo
+    } else {
+        switch(month){
+            case 1:
+                year--
+                month = 12
+                day = 31 - (daysAgo - day)
+                break;
+            case 2,4,6,8,9,11:
+                month--
+                day = 31 - (daysAgo - day)
+                break;
+
+            case 5,7,10,12:
+                month--
+                day = 30 - (daysAgo - day)
+                break;
+
+            case 3:
+                month = 2
+                day = 28 - (daysAgo - day)
+                break;
+            default:
+                break;
+        }
+    }
+    day < 10 ? day = '0'+ day: day = day.toString()
+    month < 10 ? month = '0'+ month: month = month.toString()
+    return `${month}/${day}/${year}`
+}
+
 const main = async () => {
     const browser = await puppeteer.launch();
     // const browser = await puppeteer.launch({headless: false});
@@ -37,22 +77,26 @@ const main = async () => {
     // Set screen size
     await page.setViewport({width: 1080, height: 1024});
 
-    let analyticsDropDownMenu,tableHandle,tableHTML
-
     //Click Analytics menu
-    analyticsDropDownMenu = await page.waitForSelector('text/Analytics');
+    let analyticsDropDownMenu = await page.waitForSelector('text/Analytics');
     await analyticsDropDownMenu.click();
 
     //Click Color Performance tab
     const colorPerformanceMenuTab = await page.waitForSelector('text/Color Performance');
     await colorPerformanceMenuTab.click();
 
+    //Fill Date Picker
+    const datePickerContainer = await page.waitForSelector('.form-control.date-picker')
+    await datePickerContainer.click({ clickCount: 3 })
+    await page.type('.form-control.date-picker', sevenDaysAgoDate(3));
+
     //Get tbody HTML
-    tableHandle = await page.waitForSelector('tbody')
-    tableHTML = await page.evaluate(el => el.innerHTML,tableHandle)
+    let tableHandle = await page.waitForSelector('tbody')
+    let tableHTML = await page.evaluate(el => el.innerHTML,tableHandle)
 
     //parse to get colorData
-    let colorData = parseColorData(tableHTML)
+    let colorData = await parseColorData(tableHTML)
+    // console.log(colorData)
 
     await tableHandle.dispose();
     await colorPerformanceMenuTab.dispose();
@@ -107,8 +151,8 @@ const analyze = (colorData, trophyData) => {
     mythicData.forEach(run => mythicBreakdown[run.color] ? mythicBreakdown[run.color]++ : mythicBreakdown[run.color] = 1)
     
     //PLAT+ vs DIAMOND+
-    // let platPlusBreakdown = {}, platToMythData = [...mythicData,...platinumData,...diamondData]
-    let platPlusBreakdown = {}, platPlusData = [...mythicData,...diamondData]
+    let platPlusBreakdown = {}, platPlusData = [...mythicData,...platinumData,...diamondData]
+    // let platPlusBreakdown = {}, platPlusData = [...mythicData,...diamondData]
     
     platPlusData.forEach(run => platPlusBreakdown[run.color] ? platPlusBreakdown[run.color]++ : platPlusBreakdown[run.color] = 1)
 
@@ -127,7 +171,7 @@ const analyze = (colorData, trophyData) => {
     // console.log(colorData)
 
     colorData.map(row => {
-        console.log(row)
+        // console.log(row)
         try {
             row.trophies = platPlusBreakdown.find(element => element[0] === row.color || element[0].split('').reverse().join('') === row.color)[1]
         }catch{
