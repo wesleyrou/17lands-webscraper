@@ -1,5 +1,10 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { Keyboard } from 'puppeteer';
 // import {readFileSync} from 'fs';
+
+// const dataSet = 'plat+'
+const dataSet = 'diamond+'
+const expansion = 'LCI'
+// const expansion = 'Y24'
 
 const parseColorData = (html) => {
     let sliceRangeStart = html.split('</tr>').findIndex(row => row.match(/<tr class="color-summary"><td class="">Two-color/g))
@@ -68,7 +73,9 @@ const sevenDaysAgoDate = (daysAgo = 7) => {
 }
 
 const main = async () => {
-    const browser = await puppeteer.launch();
+    // const browser = await puppeteer.launch();
+    const browser = await puppeteer.launch({headless: true});
+    //Headless:false for testing
     // const browser = await puppeteer.launch({headless: false});
     const page = await browser.newPage();
 
@@ -82,13 +89,19 @@ const main = async () => {
     await analyticsDropDownMenu.click();
 
     //Click Color Performance tab
-    const colorPerformanceMenuTab = await page.waitForSelector('text/Color Performance');
+    const colorPerformanceMenuTab = await page.waitForSelector('text/Deck Color Data');
     await colorPerformanceMenuTab.click();
-
+    
+    //Fill Expansion Picker
+    const expansionContainer = await page.waitForSelector('#expansion.form-control')
+    await expansionContainer.click({ clickCount: 3 })
+    await page.type('#expansion.form-control', expansion, {delay:150});
+    await page.keyboard.press('Enter')
+    
     //Fill Date Picker
     const datePickerContainer = await page.waitForSelector('.form-control.date-picker')
     await datePickerContainer.click({ clickCount: 3 })
-    await page.type('.form-control.date-picker', sevenDaysAgoDate(3));
+    await page.type('.form-control.date-picker', sevenDaysAgoDate());
 
     //Get tbody HTML
     let tableHandle = await page.waitForSelector('tbody')
@@ -107,8 +120,14 @@ const main = async () => {
     await analyticsDropDownMenu.click();
 
     //Click Recent Trophy tab
-    const trophyTab = await page.waitForSelector('text/Recent Trophy');
+    const trophyTab = await page.waitForSelector('text/Trophy Decks');
     await trophyTab.click();
+
+    //Fill Expansion Picker
+    const expansionContainerTrophy = await page.waitForSelector('#expansion.form-control')
+    await expansionContainerTrophy.click({ clickCount: 3 })
+    await page.type('#expansion.form-control', expansion, {delay:150});
+    await page.keyboard.press('Enter')
 
     //Get tbody HTML
     tableHandle = await page.waitForSelector('tbody')
@@ -151,8 +170,10 @@ const analyze = (colorData, trophyData) => {
     mythicData.forEach(run => mythicBreakdown[run.color] ? mythicBreakdown[run.color]++ : mythicBreakdown[run.color] = 1)
     
     //PLAT+ vs DIAMOND+
-    let platPlusBreakdown = {}, platPlusData = [...mythicData,...platinumData,...diamondData]
-    // let platPlusBreakdown = {}, platPlusData = [...mythicData,...diamondData]
+    let platPlusBreakdown = {}, platPlusData
+    if(dataSet === 'plat+') platPlusData = [...mythicData,...platinumData,...diamondData]
+    else platPlusData = [...mythicData,...diamondData]
+    console.log('DataSet:',dataSet)
     
     platPlusData.forEach(run => platPlusBreakdown[run.color] ? platPlusBreakdown[run.color]++ : platPlusBreakdown[run.color] = 1)
 
@@ -182,6 +203,42 @@ const analyze = (colorData, trophyData) => {
     })
     colorData.sort((a,b) => b.adjustedTrophies - a.adjustedTrophies)
     colorData.forEach(color => console.log(`Color: ${color.color} WinRate: ${color.wr} PlayRate: ${color.percentTotalDrafts}% Trophies: ${color.trophies} AdjustedTrophyScore: ${color.adjustedTrophies}`))
+    let individualColorBreakdown = {
+        W:{},
+        U:{},
+        B:{},
+        R:{},
+        G:{},
+    }
+    colorData.forEach(color => {
+        if(color.color.match(/W/)) {
+            individualColorBreakdown.W.wins ? individualColorBreakdown.W.wins += parseInt(color.wins) : individualColorBreakdown.W.wins = parseInt(color.wins)
+            individualColorBreakdown.W.games ? individualColorBreakdown.W.games += parseInt(color.games) : individualColorBreakdown.W.games = parseInt(color.games)
+        }
+        if(color.color.match(/U/)) {
+            individualColorBreakdown.U.wins ? individualColorBreakdown.U.wins += parseInt(color.wins) : individualColorBreakdown.U.wins = parseInt(color.wins)
+            individualColorBreakdown.U.games ? individualColorBreakdown.U.games += parseInt(color.games) : individualColorBreakdown.U.games = parseInt(color.games)
+        }
+        if(color.color.match(/B/)) {
+            individualColorBreakdown.B.wins ? individualColorBreakdown.B.wins += parseInt(color.wins) : individualColorBreakdown.B.wins = parseInt(color.wins)
+            individualColorBreakdown.B.games ? individualColorBreakdown.B.games += parseInt(color.games) : individualColorBreakdown.B.games = parseInt(color.games)
+        }
+        if(color.color.match(/R/)) {
+            individualColorBreakdown.R.wins ? individualColorBreakdown.R.wins += parseInt(color.wins) : individualColorBreakdown.R.wins = parseInt(color.wins)
+            individualColorBreakdown.R.games ? individualColorBreakdown.R.games += parseInt(color.games) : individualColorBreakdown.R.games = parseInt(color.games)
+        }
+        if(color.color.match(/G/)) {
+            individualColorBreakdown.G.wins ? individualColorBreakdown.G.wins += parseInt(color.wins) : individualColorBreakdown.G.wins = parseInt(color.wins)
+            individualColorBreakdown.G.games ? individualColorBreakdown.G.games += parseInt(color.games) : individualColorBreakdown.G.games = parseInt(color.games)
+        }
+    })
+
+    for(let color in individualColorBreakdown){
+        individualColorBreakdown[color].winPercent = Math.trunc((individualColorBreakdown[color].wins/individualColorBreakdown[color].games)*1000)/10
+    }
+
+    console.log(individualColorBreakdown)
+
     // console.log(colorData)
 }
 
